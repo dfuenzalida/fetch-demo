@@ -39,8 +39,8 @@
      [:h3 "Search results"]
      [:ul
       (when (seq @items)
-        (map (fn [item]
-               [:li {:key (:index item)} (str (get item :title) " " (get item :pageid))]) @items))
+        (map (fn [{:keys [index title pageid]}]
+               [:li {:key index} (str title " " pageid)]) @items))
       ]]
     ))
 
