@@ -1,21 +1,31 @@
 (ns app.main
   (:require [reagent.core :as r]
-            [reagent.dom :as rdom]))
+            [reagent.dom :as rdom]
+            [cljs.core.async :refer [go]]
+            [cljs.core.async.interop :refer-macros [<p!]]))
 
 ;; Main application ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (def error (r/atom nil))
-(def loaded? (r/atom false))
+(def loaded? (r/atom true))
 (def items (r/atom []))
 (def query (r/atom ""))
 
 (defn run-query []
-  (println (js/Date.) "run-query")
-  (clj->js [{:index 0 :title "first dummy" :pageid 100} {:index 1 :title "second dummy" :pageid 202}])
-  )
+  (let [url (str "https://en.wikipedia.org/w/api.php?action=query&origin=*&format=json"
+                 "&generator=search&gsrnamespace=0&gsrlimit=5&gsrsearch=%27" @query "%27")]
+    (go
+      (try
+        (let [response (<p! (js/fetch url))
+              result   (<p! (.json response))
+              pages    (-> (js->clj result :keywordize-keys true) :query :pages vals)]
+          (reset! loaded? true)
+          (reset! items pages))
+        (catch js/Error err (reset! error (ex-cause err)))))
+    ))
 
-(defn queryChanged [evt]
-  (let [new-value (evt.target.value)]
+(defn query-changed [evt]
+  (let [new-value (.-value (.-target evt))]
     (reset! query new-value)
     (run-query)))
 
@@ -25,10 +35,12 @@
     (false? @loaded?) [:div "Loading..."]
     :else
     [:<>
-     [:input {:type "text" :placeholder "Search terms" :value @query :onChange queryChanged}]
+     [:input {:type "text" :placeholder "Search terms" :value @query :onChange query-changed}]
      [:h3 "Search results"]
      [:ul
-      (mapv (fn [item] [:li {:key (.-index item)} (str (.-title item) (.-pageid item))]) @items)
+      (when (seq @items)
+        (map (fn [item]
+               [:li {:key (:index item)} (str (get item :title) " " (get item :pageid))]) @items))
       ]]
     ))
 
@@ -42,7 +54,6 @@
   (mount-root))
 
 (defn main! []
-  (uifabric/initializeIcons)
   (init-ui))
 
 (defn ^:dev/after-load reload! []
